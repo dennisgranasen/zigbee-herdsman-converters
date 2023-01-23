@@ -114,7 +114,7 @@ module.exports = [
                 .withSystemMode(['off', 'heat'], ea.STATE_SET).withRunningState(['idle', 'heat', 'cool'], ea.STATE)
                 .withPreset(['hold', 'program']),
             e.temperature_sensor_select(['IN', 'AL', 'OU']),
-            exposes.composite('program', 'program').withDescription('Time of day and setpoint to use when in program mode')
+            exposes.composite('program', 'program', ea.STATE_SET).withDescription('Time of day and setpoint to use when in program mode')
                 .withFeature(exposesLocal.hour('weekdays_p1_hour'))
                 .withFeature(exposesLocal.minute('weekdays_p1_minute'))
                 .withFeature(exposesLocal.program_temperature('weekdays_p1_temperature'))
@@ -291,9 +291,9 @@ module.exports = [
             e.valve_state(), e.position(), e.window_detection(),
             exposes.binary('window', ea.STATE, 'OPEN', 'CLOSED').withDescription('Window status closed or open '),
             exposes.climate()
-                .withLocalTemperature(ea.STATE).withSetpoint('current_heating_setpoint', 5, 45, 0.5, ea.STATE_SET)
+                .withLocalTemperature(ea.STATE).withSetpoint('current_heating_setpoint', 5, 35, 1, ea.STATE_SET)
                 .withLocalTemperatureCalibration(-9, 9, 1, ea.STATE_SET)
-                .withSystemMode(['off', 'heat'], ea.STATE_SET)
+                .withSystemMode(['heat'], ea.STATE_SET)
                 .withRunningState(['idle', 'heat'], ea.STATE)
                 .withPreset(['programming', 'manual', 'temporary_manual', 'holiday'],
                     'MANUAL MODE ☝ - In this mode, the device executes manual temperature setting. '+
@@ -308,9 +308,9 @@ module.exports = [
                 'You can set up to 4 stages of temperature every for WEEKDAY ➀➁➂➃➄,  SATURDAY ➅ and SUNDAY ➆.'),
             exposes.binary('boost_heating', ea.STATE_SET, 'ON', 'OFF').withDescription('Boost Heating: press and hold "+" for 3 seconds, ' +
                 'the device will enter the boost heating mode, and the ▷╵◁ will flash. The countdown will be displayed in the APP'),
-            exposes.numeric('boost_heating_countdown', ea.STATE).withUnit('Min').withDescription('Countdown in minutes')
+            exposes.numeric('boost_heating_countdown', ea.STATE).withUnit('minutes').withDescription('Countdown in minutes')
                 .withValueMin(0).withValueMax(15),
-            exposes.numeric('boost_heating_countdown_time_set', ea.STATE_SET).withUnit('second')
+            exposes.numeric('boost_heating_countdown_time_set', ea.STATE_SET).withUnit('seconds')
                 .withDescription('Boost Time Setting 100 sec - 900 sec, (default = 300 sec)').withValueMin(100)
                 .withValueMax(900).withValueStep(100)],
     },

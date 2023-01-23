@@ -61,6 +61,18 @@ const tzLocal = {
             if (key === 'brightness') await entity.read('genLevelCtrl', [61440]);
         },
     },
+    TS110E_light_onoff_brightness: {
+        ...tz.light_onoff_brightness,
+        convertSet: async (entity, key, value, meta) => {
+            const {message} = meta;
+            if (message.state === 'ON' || message.brightness > 1) {
+                // Does not turn off with physical press when turned on with just moveToLevelWithOnOff, required on before.
+                // https://github.com/Koenkk/zigbee2mqtt/issues/15902#issuecomment-1382848150
+                await entity.command('genOnOff', 'on', {}, utils.getOptions(meta.mapped, entity));
+            }
+            return tz.light_onoff_brightness.convertSet(entity, key, value, meta);
+        },
+    },
     SA12IZL_silence_siren: {
         key: ['silence_siren'],
         convertSet: async (entity, key, value, meta) => {
@@ -771,6 +783,7 @@ module.exports = [
             {vendor: 'CR Smart Home', model: 'TS0203'},
             {vendor: 'TuYa', model: 'iH-F001'},
             {vendor: 'Tesla Smart', model: 'TSL-SEN-DOOR'},
+            {vendor: 'Cleverio', model: 'SS100'},
         ],
         configure: async (device, coordinatorEndpoint, logger) => {
             try {
@@ -1009,6 +1022,8 @@ module.exports = [
         vendor: 'TuYa',
         description: 'Zigbee RGBW light',
         extend: extend.light_onoff_brightness_color({disablePowerOnBehavior: true}),
+        exposes: [e.light_brightness_color({disablePowerOnBehavior: true})
+            .setAccess('color_xy', ea.STATE_SET).setAccess('color_hs', ea.STATE_SET)],
         toZigbee: utils.replaceInArray(extend.light_onoff_brightness_color().toZigbee, [tz.light_color], [tzLocal.TS0504B_color]),
         meta: {applyRedFix: true},
     },
@@ -1089,6 +1104,7 @@ module.exports = [
             {modelID: 'TS0202', manufacturerName: '_TYZB01_zwvaj5wy'},
             {modelID: 'TS0202', manufacturerName: '_TZ3000_bsvqrxru'},
             {modelID: 'TS0202', manufacturerName: '_TYZB01_tv3wxhcz'},
+            {modelID: 'TS0202', manufacturerName: '_TYZB01_rwb0hxtf'},
             {modelID: 'TS0202', manufacturerName: '_TYZB01_hqbdru35'},
             {modelID: 'TS0202', manufacturerName: '_TZ3000_otvn3lne'},
             {modelID: 'TS0202', manufacturerName: '_TZ3000_tiwq83wk'},
@@ -1153,11 +1169,18 @@ module.exports = [
             exposes.enum('sensitivity', ea.ALL, ['low', 'medium', 'high']).withDescription('PIR sensor sensitivity'),
             exposes.enum('keep_time', ea.ALL, [30, 60, 120]).withDescription('PIR keep time in seconds'),
         ],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(1);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genPowerCfg']);
+            await reporting.batteryPercentageRemaining(endpoint);
+            await reporting.batteryVoltage(endpoint);
+        },
     },
     {
         fingerprint: [{modelID: 'TS0207', manufacturerName: '_TZ3000_m0vaazab'},
             {modelID: 'TS0207', manufacturerName: '_TZ3000_ufttklsz'},
             {modelID: 'TS0207', manufacturerName: '_TZ3000_nkkl7uzv'},
+            {modelID: 'TS0207', manufacturerName: '_TZ3000_misw04hq'},
             {modelID: 'TS0207', manufacturerName: '_TZ3000_gszjt2xx'},
             {modelID: 'TS0207', manufacturerName: '_TZ3000_5k5vh43t'}],
         model: 'TS0207_repeater',
@@ -1299,14 +1322,25 @@ module.exports = [
         fromZigbee: [tuya.fz.datapoints],
         toZigbee: [tuya.tz.datapoints],
         configure: tuya.configureMagicPacket,
-        exposes: [tuya.exposes.lightBrightness().withEndpoint('l1'), tuya.exposes.lightBrightness().withEndpoint('l2')],
+        exposes: [
+            tuya.exposes.lightBrightnessWithMinMax().withEndpoint('l1'),
+            tuya.exposes.lightBrightnessWithMinMax().withEndpoint('l2'),
+            tuya.exposes.countdown().withEndpoint('l1'),
+            tuya.exposes.countdown().withEndpoint('l2'),
+        ],
         meta: {
             multiEndpoint: true,
             tuyaDatapoints: [
                 [1, 'state_l1', tuya.valueConverter.onOff, {skip: tuya.skip.stateOnAndBrightnessPresent}],
                 [2, 'brightness_l1', tuya.valueConverter.scale0_254to0_1000],
+                [3, 'min_brightness_l1', tuya.valueConverter.scale0_254to0_1000],
+                [5, 'max_brightness_l1', tuya.valueConverter.scale0_254to0_1000],
+                [6, 'countdown_l1', tuya.valueConverter.countdown],
                 [7, 'state_l2', tuya.valueConverter.onOff, {skip: tuya.skip.stateOnAndBrightnessPresent}],
                 [8, 'brightness_l2', tuya.valueConverter.scale0_254to0_1000],
+                [9, 'min_brightness_l2', tuya.valueConverter.scale0_254to0_1000],
+                [11, 'max_brightness_l2', tuya.valueConverter.scale0_254to0_1000],
+                [12, 'countdown_l2', tuya.valueConverter.countdown],
             ],
         },
         endpoint: (device) => {
@@ -2005,8 +2039,7 @@ module.exports = [
         },
     },
     {
-        fingerprint: [{modelID: 'TS0003', manufacturerName: '_TZ3000_vsasbzkf'},
-            {modelID: 'TS0003', manufacturerName: '_TZ3000_odzoiovu'}],
+        fingerprint: tuya.fingerprint('TS0003', ['_TZ3000_vsasbzkf', '_TZ3000_odzoiovu', '_TZ3000_4o16jdca']),
         model: 'TS0003_switch_module',
         vendor: 'TuYa',
         description: '3 gang switch module',
@@ -2082,6 +2115,7 @@ module.exports = [
             {modelID: 'TS0601', manufacturerName: '_TZE200_zuz7f94z'},
             {modelID: 'TS0601', manufacturerName: '_TZE200_68nvbio9'},
             {modelID: 'TS0601', manufacturerName: '_TZE200_3ylew7b4'},
+            {modelID: 'TS0601', manufacturerName: '_TZE200_llm0epxg'},
         ],
         model: 'TS0601_cover',
         vendor: 'TuYa',
@@ -2109,7 +2143,7 @@ module.exports = [
         toZigbee: [tz.tuya_cover_control, tz.tuya_cover_options],
         exposes: [
             e.cover_position().setAccess('position', ea.STATE_SET),
-            exposes.composite('options', 'options')
+            exposes.composite('options', 'options', ea.STATE_SET)
                 .withFeature(exposes.numeric('motor_speed', ea.STATE_SET)
                     .withValueMin(0)
                     .withValueMax(255)
@@ -2168,7 +2202,7 @@ module.exports = [
                 .withRunningState(['idle', 'heat'], ea.STATE),
             e.auto_lock(), e.away_mode(), e.away_preset_days(), e.boost_time(), e.comfort_temperature(), e.eco_temperature(), e.force(),
             e.max_temperature(), e.min_temperature(), e.away_preset_temperature(),
-            exposes.composite('programming_mode').withDescription('Schedule MODE ⏱ - In this mode, ' +
+            exposes.composite('programming_mode', 'programming_mode', ea.STATE).withDescription('Schedule MODE ⏱ - In this mode, ' +
                     'the device executes a preset week programming temperature time and temperature.')
                 .withFeature(e.week())
                 .withFeature(exposes.text('workdays_schedule', ea.STATE_SET))
@@ -2224,7 +2258,7 @@ module.exports = [
                 '- schedule for Monday used for each day (define it only for Monday). `mon_fri+sat+sun` - schedule for ' +
                 'workdays used from Monday (define it only for Monday), Saturday and Sunday are defined separately. `separate` ' +
                 '- schedule for each day is defined separately.'),
-            exposes.composite('schedule', 'schedule').withFeature(exposes.enum('week_day', ea.SET, ['monday', 'tuesday',
+            exposes.composite('schedule', 'schedule', ea.SET).withFeature(exposes.enum('week_day', ea.SET, ['monday', 'tuesday',
                 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])).withFeature(exposes.text('schedule', ea.SET))
                 .withDescription('Schedule will work with "auto" preset. In this mode, the device executes ' +
                 'a preset week programming temperature time and temperature. Before using these properties, check `working_day` ' +
@@ -2447,7 +2481,7 @@ module.exports = [
                     'ON - In this mode, the thermostat stays open ' +
                     'OFF - In this mode, the thermostat stays closed')
                 .withSystemMode(['auto', 'heat', 'off'], ea.STATE_SET),
-            exposes.composite('programming_mode').withDescription('Auto MODE ⏱ - In this mode, ' +
+            exposes.composite('programming_mode', 'programming_mode', ea.STATE).withDescription('Auto MODE ⏱ - In this mode, ' +
                     'the device executes a preset week programming temperature time and temperature. ')
                 .withFeature(exposes.text('monday_schedule', ea.STATE))
                 .withFeature(exposes.text('tuesday_schedule', ea.STATE))
@@ -3818,8 +3852,12 @@ module.exports = [
         description: '1 channel dimmer',
         fromZigbee: extend.light_onoff_brightness({disablePowerOnBehavior: true, disableMoveStep: true, disableTransition: true})
             .fromZigbee.concat([tuya.fz.power_on_behavior, fzLocal.TS110E_switch_type, fzLocal.TS110E]),
-        toZigbee: extend.light_onoff_brightness({disablePowerOnBehavior: true, disableMoveStep: true, disableTransition: true})
-            .toZigbee.concat([tuya.tz.power_on_behavior, tzLocal.TS110E_options]),
+        toZigbee: utils.replaceInArray(
+            extend.light_onoff_brightness({disablePowerOnBehavior: true, disableMoveStep: true, disableTransition: true})
+                .toZigbee.concat([tuya.tz.power_on_behavior, tzLocal.TS110E_options]),
+            [tz.light_onoff_brightness],
+            [tzLocal.TS110E_light_onoff_brightness],
+        ),
         exposes: [e.light_brightness(), e.power_on_behavior(), tuya.exposes.switchType()],
         configure: async (device, coordinatorEndpoint, logger) => {
             await tuya.configureMagicPacket(device, coordinatorEndpoint, logger);
